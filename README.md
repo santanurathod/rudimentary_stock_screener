@@ -1,11 +1,4 @@
-# Buy Score Logic
-
 ## Note: this is not an investment advice, but a mere sanity check, please do your own due diligence before investing
-
-This repo contains a personal framework for ranking and comparing companies for investments over a ~2-year horizon.  It’s not a screener in the conventional sense — it’s meant to balance **growth**, **profitability**, **valuation**, and **financial safety**, and then quantify that balance into a consistent “Buy Score”.
-
----
-
 
 ## the idea and philosophy
 I wanted a scoring logic that sits between quant and intuition:  
@@ -17,121 +10,219 @@ The goal is to find companies that would likely beat an index fund simply becaus
 - sensibly priced,
 - and not financially fragile.
 
-
-So the framework rewards companies that are:
-
-- **growing** (revenues + improving margins)
-- **profitable and cash-rich**
-- **reasonably valued** for their quality
-- **financially safe** (low leverage, good liquidity)
-- **consistent** in execution
-- **reinvesting wisely** (R&D and CapEx discipline)
-
-It’s basically **quality-growth at a sensible price**.
-
-## tl;dr
-
-> **Buy businesses that are growing and improving, generate cash, aren’t overpriced, and don’t blow up on leverage.**
+# Buy Score Model  
+*A quantitative framework for ranking public equities (2-year horizon)*
 
 ---
 
-## data inputs
+## 🧭 Overview
 
-- **Quarterly statements (last 5 quarters)** → momentum, margin trend  
-- **Annual statements (last 4 years)** → historical consistency  
-- **Yahoo / Finviz snapshot** → forward P/E, PEG, margins, ROE, etc.  
+The **Buy Score** model is a quantitative system I built to rank public companies based on how *fundamentally strong, efficient, and reasonably valued* they are.  
+It combines financial data from **Yahoo Finance (via yfinance)** and **Finviz** to produce a composite score between **0 and 100**.
 
-Each metric is normalized between 0 and 1.  
-Recent data gets higher weight (roughly 70% recent, 30% historical).
+The goal is to find **high-quality, well-priced businesses** that can outperform index funds over a 1–2 year period —  
+companies that keep compounding even in flat or uncertain markets.
 
 ---
 
-## Factors Considered:
+## ⚙️ Core Idea
+
+Each company’s performance is evaluated across **eight pillars**:
+
+1. **Growth** – scale and operating efficiency  
+2. **Profitability** – margins and capital returns  
+3. **Valuation** – price paid vs. quality  
+4. **Safety** – balance sheet strength  
+5. **Stability** – consistency of performance  
+6. **Moat** – margin defensibility  
+7. **R&D Intensity** – innovation without over-spend  
+8. **Investment Discipline** – quality of capital allocation  
+
+Every metric is normalized to a 0–1 range using simple linear scaling:
+
+- `pos(x, low, high)` → higher values are better  
+- `neg(x, low, high)` → lower values are better  
+
+To capture both *momentum* and *sustainability*, the model blends recent (quarterly) and historical (annual) data as:  
+`Final = α * Recent + (1 - α) * Long-Term`  
+with α typically around 0.6–0.7.
+
+---
+
+## 🧩 Factor Breakdown
 
 ### 1. Growth
-Focuses on:
-- Revenue growth (recent 12 months vs previous year)  
-- Operating margin improvement (quarterly + annual)  
+Captures both *top-line expansion* and *improving efficiency*.  
+It’s not just about growing revenues — margins must expand too.
 
-It rewards both *scale* and *efficiency*.  
-Pure topline growth without better margins doesn’t count as “quality growth”.
+**Formula:**
+
+Growth = 0.5 * pos(RevenueGrowth, 5, 40)+
+ 0.2 * pos(ΔOperatingMargin_quarterly, 0, 12)+
+0.3 * pos(ΔOperatingMargin_annual, 0, 8)
+
+
+A company growing 20–30% with expanding margins scores high;  
+pure topline growth without efficiency gains doesn’t.
 
 ---
 
 ### 2. Profitability
-Averages:
-- Gross Margin  
-- Operating Margin  
-- ROE  
-- FCF Margin  
+Measures how well the company turns revenue into returns.
 
-Simple rule: high margins → better economics → higher score.
+**Inputs:**
+- Gross Margin (GM)  
+- Operating Margin (OM)  
+- Return on Equity (ROE)  
+- Free Cash Flow Margin (FCF%)
+
+**Formula:**
+Profitability = 
+(pos(GrossMargin, 40, 70)+
+pos(OperatingMargin, 15, 45)+
+pos(ROE, 10, 40)+
+pos(FCF%, 5, 35))/4
+
+
+Higher margins = stronger unit economics and durable returns.
 
 ---
 
 ### 3. Valuation
-Uses:
-- Forward P/E  
-- EV/EBITDA  
-- PEG (if available)  
-- fallback = EV/EBITDA ÷ growth  
+Checks whether the stock is reasonably priced relative to its quality and growth.  
+Combines absolute and growth-adjusted valuation metrics.
 
-Weighted roughly 50/30/20.  
-Lower ratios mean cheaper valuation.  
-PEG is preferred when available; otherwise growth-adjusted value is used.
+**Inputs:**
+- Forward P/E (lower = cheaper)
+- EV/EBITDA (lower = cheaper)
+- PEG (preferred when available)
+- Fallback: EV/EBITDA ÷ Revenue Growth
+
+**Formula:**
+
+```
+V_PE = neg(ForwardPE, 12, 45)
+V_EV = neg(EV/EBITDA, 6, 30)
+if PEG exists:
+V_driver = neg(PEG, 0.5, 3.0)
+else:
+V_driver = neg(EV/EBITDA / RevenueGrowth, 0.4, 2.5)
+
+Valuation = 0.5 * V_PE + 0.3 * V_EV + 0.2 * V_driver
+```
+
+PEG normalizes valuation by growth rate.  
+If unavailable, growth-adjusted EV/EBITDA keeps comparisons fair.
 
 ---
 
 ### 4. Safety
-Checks:
-- Debt-to-Equity (lower is better)  
-- Current Ratio (higher is better)  
+Assesses the company’s financial resilience.
 
-Average of both → balance sheet health.
+**Inputs:**
+- Debt-to-Equity ratio  
+- Current Ratio  
+
+**Formula:**
+Safety = 0.5 * [ neg(Debt/Equity, 0, 1) + pos(CurrentRatio, 1, 3) ]
+
+Low leverage and healthy liquidity earn higher scores.
 
 ---
 
 ### 5. Stability
-Measures **revenue consistency** over time (coefficient of variation).  
-Stable revenue growth = better predictability.
+Measures **predictability of revenue** using the coefficient of variation (CV).  
+Lower variation means steadier growth.
+
+**Formula:**
+Stability = neg(CV_RevenueGrowth, 0.3, 1.5)
+
+Stable revenue → easier forecasting → less risk.
 
 ---
 
 ### 6. Moat
-Same logic as stability, but for **gross margins**.  
-If GM% doesn’t swing much, the company likely has pricing power or cost control.  
-That’s the moat proxy.
+Uses the same logic as stability but applied to **gross margins** —  
+if margins don’t fluctuate much, pricing power or cost advantage is likely.
+
+**Formula:**
+Moat = neg(CV_GrossMargin, 0.05, 0.25)
+
 
 ---
 
-### 7. R&D Score
-R&D spend as % of revenue (recent + 3-year avg).  
-Healthy range ≈ 5%–20%.  
-Encourages innovation without excessive burn.
+### 7. R&D Intensity
+Encourages innovation without overspending.  
+Too little → stagnation; too much → inefficiency.
+
+**Formula:**
+R&D Score = pos(R&D/Revenue%, 5, 22)
+
+
+5–20% of revenue spent on R&D is generally healthy.
 
 ---
 
 ### 8. Investment Discipline
-CapEx as % of Operating Cash Flow.  
-Lower is better for a 2-year window (cash flexibility > over-expansion).  
-Over 60% starts hurting the score.
+Evaluates how wisely the company reinvests operating cash flow.
+
+**Formula:**
+InvestmentScore = neg(CapEx/OCF%, 15, 60)
+
+
+Below 15% = conservative,  
+15–40% = balanced,  
+>60% = aggressive (usually penalized).
 
 ---
 
-## weighting and score interpretation
+## 🔀 Blending Recent and Historical Data
 
-Each pillar is weighted through `importance_factors` and combined into a 0–100 score:
+Each factor uses both recent and long-term data.  
+To keep things responsive but not overreactive, scores are combined as:
 
+
+Blended = α * Recent + (1 - α) * LongTerm
+
+where α typically ≈ 0.6–0.7.
+
+This makes the model responsive to changes without ignoring history.
 
 ---
 
----
+## 🧮 Final Composite Score
+
+All sub-scores are combined into one master score, weighted by importance:
+
+```
+for importance_factors = {
+    'growth': 0.3,
+    'profitability': 0.3,
+    'valuation': 0.15,
+    'safety': 0.12,
+    'stability': 0.13,
+    'moat': 0,
+    'rd_score': 0,
+    'invest_score': 0
+}
+```
+
+BuyScore =
+0.30 * Growth +
+0.30 * Profitability +
+0.15 * Valuation +
+0.12 * Safety +
+0.13 * Stability +
+0.00 * Moat +
+0.00 * R&D Score +
+0.00 * Investment Score
+
+BuyScore = 100 * BuyScore
+
 
 ## future improvements
 
-- Add sector-relative scoring  
-- Penalize dilution (shares outstanding trend)  
-- Add optional macro filter (interest rate regime)  
+- Add sector-relative scoring 
 - Include insider ownership & FCF yield  
 
 ---
